@@ -197,14 +197,14 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr() {
 
 static std::unique_ptr<ExprAST> ParsePrimary() {
   switch (CurTok) {
-    default:
-      return LogError("unknown token when expecting an expression");
     case tok_identifier:
       return ParseIdentifierExpr();
     case tok_number:
       return ParseNumberExpr();
     case '(':
       return ParseParenExpr();
+    default:
+      return LogError("unknown token when expecting an expression");
   }
 }
 
@@ -268,6 +268,20 @@ static std::unique_ptr<FunctionAST> ParseDefinition() {
   return nullptr;
 }
 
+static std::unique_ptr<FunctionAST> ParseTopLevelExpr() {
+  if (auto E = ParseExpression()) {
+    auto Proto = llvm::make_unique<PrototypeAST>("__anon_expr",
+        std::vector<std::string>());
+    return llvm::make_unique<FunctionAST>(std::move(Proto), std::move(E));
+  }
+  return nullptr;
+}
+
+static std::unique_ptr<PrototypeAST> ParseExtern() {
+  getNextToken();
+  return ParsePrototype();
+}
+
 // Top Level Parsing
 
 static void HandleDefinition() {
@@ -280,7 +294,7 @@ static void HandleDefinition() {
 }
 
 static void HandleExtern() {
-  if (ParseDefinition()) {
+  if (ParseExtern()) {
     fprintf(stdout, "Parsed a function extern.\n");
   }
   else {
@@ -289,7 +303,7 @@ static void HandleExtern() {
 }
 
 static void HandleTopLevelExpr() {
-  if (ParseDefinition()) {
+  if (ParseTopLevelExpr()) {
     fprintf(stdout, "Parsed a function top-level expression.\n");
   }
   else {
