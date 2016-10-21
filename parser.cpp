@@ -138,6 +138,8 @@ static std::unique_ptr<ExprAST> ParseParenExpr();
 static std::unique_ptr<ExprAST> ParseIdentifierExpr();
 static std::unique_ptr<ExprAST> ParsePrimary();
 static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec, std::unique_ptr<ExprAST> LHS);
+static std::unique_ptr<PrototypeAST> ParsePrototype();
+static std::unique_ptr<FunctionAST> ParseDefinition();
 
 static std::unique_ptr<ExprAST> ParseExpression() {
   auto LHS = ParsePrimary();
@@ -217,7 +219,6 @@ static int GetTokPrecedence() {
   return TokPrec;
 }
 
-
 static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec, std::unique_ptr<ExprAST> LHS) {
   while (1) {
     int TokPrec = GetTokPrecedence();
@@ -235,9 +236,97 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec, std::unique_ptr<Expr
   }
 }
 
+// Rest
+static std::unique_ptr<PrototypeAST> ParsePrototype() {
+  if (CurTok != tok_identifier)
+    return LogErrorP("Expected function name in prototype");
+
+  std::string FnName = IdentifierStr;
+  getNextToken();
+  if (CurTok != '(') 
+    return LogErrorP("Expected '(' in prototype");
+
+  // Read the list of argument name.
+  std::vector<std::string> ArgNames;
+  while (getNextToken() == tok_identifier)
+    ArgNames.push_back(IdentifierStr);
+  if (CurTok != ')')
+    return LogErrorP("Expected ')' in prototype");
+
+  getNextToken(); //eat )
+  return llvm::make_unique<PrototypeAST>(FnName, std::move(ArgNames));
+}
+
+static std::unique_ptr<FunctionAST> ParseDefinition() {
+  getNextToken();
+  auto Proto = ParsePrototype();
+  if (!Proto) return nullptr;
+
+  if (auto E = ParseExpression())
+    return llvm::make_unique<FunctionAST>(std::move(Proto), std::move(E));
+
+  return nullptr;
+}
+
+// Top Level Parsing
+
+static void HandleDefinition() {
+  if (ParseDefinition()) {
+    fprintf(stdout, "Parsed a function definition.\n");
+  }
+  else {
+    getNextToken();
+  }
+}
+
+static void HandleExtern() {
+  if (ParseDefinition()) {
+    fprintf(stdout, "Parsed a function extern.\n");
+  }
+  else {
+    getNextToken();
+  }
+}
+
+static void HandleTopLevelExpr() {
+  if (ParseDefinition()) {
+    fprintf(stdout, "Parsed a function top-level expression.\n");
+  }
+  else {
+    getNextToken();
+  }
+}
+
+static void MainLoop() {
+  while(1) {
+    fprintf(stdout, "ready> ");
+    switch (CurTok) {
+      case tok_eof: 
+        return;
+      case ';':
+        getNextToken();
+        break;
+      case tok_def:
+        HandleDefinition();
+        break;
+      case tok_extern:
+        HandleExtern();
+        break;
+      default:
+        HandleTopLevelExpr();
+        break;
+    }
+  }
+}
+
 int main(int argc, char** argv) {
   BinopPrecedence['<'] = 10;
   BinopPrecedence['+'] = 20;
   BinopPrecedence['-'] = 20;
   BinopPrecedence['*'] = 40;
+  
+  fprintf(stdout, "ready> ");
+  getNextToken();
+  MainLoop();
+  return 0;
 }
