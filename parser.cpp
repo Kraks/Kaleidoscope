@@ -131,6 +131,21 @@ std::unique_ptr<PrototypeAST> LogErrorP(const char* Str) {
 }
 
 // Parsing
+//
+static std::unique_ptr<ExprAST> ParseExpression();
+static std::unique_ptr<ExprAST> ParseNumberExpr();
+static std::unique_ptr<ExprAST> ParseParenExpr();
+static std::unique_ptr<ExprAST> ParseIdentifierExpr();
+static std::unique_ptr<ExprAST> ParsePrimary();
+static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec, std::unique_ptr<ExprAST> LHS);
+
+static std::unique_ptr<ExprAST> ParseExpression() {
+  auto LHS = ParsePrimary();
+  if (!LHS) {
+    return nullptr;
+  }
+  return ParseBinOpRHS(0, std::move(LHS));
+}
 
 static std::unique_ptr<ExprAST> ParseNumberExpr() {
   auto Result = llvm::make_unique<NumberExprAST>(NumVal);
@@ -202,13 +217,6 @@ static int GetTokPrecedence() {
   return TokPrec;
 }
 
-static std::unique_ptr<ExprAST> ParseExpression() {
-  auto LHS = ParsePrimary();
-  if (!LHS) {
-    return nullptr;
-  }
-  return ParseBinOpRHS(0, std::move(LHS));
-}
 
 static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec, std::unique_ptr<ExprAST> LHS) {
   while (1) {
