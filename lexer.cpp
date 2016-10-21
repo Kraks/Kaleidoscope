@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+// Lexer
+
 enum Token {
   tok_eof = -1,
   tok_def = -2,
@@ -59,6 +61,8 @@ static int gettok() {
   LastChar = getchar();
   return ThisChar;
 }
+
+// AST
 
 class ExprAST {
 public:
@@ -123,4 +127,65 @@ std::unique_ptr<ExprAST> LogError(const char* Str) {
 std::unique_ptr<PrototypeAST> LogErrorP(const char* Str) {
   LogError(Str);
   return nullptr;
+}
+
+// Parsing
+
+static std::unique_ptr<ExprAST> ParseNumberExpr() {
+  auto Result = llvm::make_unique<NumberExprAST>(NumVal);
+  getNextToken();
+  return std::move(Result);
+}
+
+static std::unique_ptr<ExprAST> ParseParenExpr() {
+  getNextToken(); // eat (
+  auto V = ParseExpression();
+  if (!V) {
+    return nullptr;
+  }
+  if (CurTok != ')') {
+    return LogError("expected ')'");
+  }
+  getNextToken(); // eat )
+  return V;
+}
+
+static std::unique_ptr<ExprAST> ParseIdentifierExpr() {
+  std::string IdName = IdentifierStr;
+  getNextToken();
+  if (CurTok != '(') 
+    return llvm::make_unique<VariableExprAST>(IdName);
+
+  // Call
+  getNextToken(); //eat '('
+  std::vector<std::unique_ptr<ExprAST>> Args;
+  if (CurTok != ')') {
+    while (1) {
+      if (auto Arg = ParseExpression())
+        Args.push_back(std::move(Arg));
+      else
+        return nullptr;
+      if (CurTok == ')') 
+        break;
+      if (CurTok != ',') 
+        return LogError("Expected ')' or ',' in argument list.");
+      getNextToken();
+    }
+  }
+
+  getNextToken(); // eat ')'
+  return llvm::make_unique<CallExprAST>(IdName, std::move(Args));
+}
+
+static std::unique_ptr<ExprAST> ParsePrimary() {
+  switch (CurTok) {
+    default:
+      return LogError("unknown token when expecting an expression");
+    case tok_identifier:
+      return ParseIdentifierExpr();
+    case tok_number:
+      return ParseNumberExpr();
+    case '(':
+      return ParseParenExpr();
+  }
 }
