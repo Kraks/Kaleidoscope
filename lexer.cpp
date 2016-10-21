@@ -1,3 +1,4 @@
+#include "llvm/ADT/STLExtras.h"
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
