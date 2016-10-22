@@ -17,6 +17,8 @@
 #include <string>
 #include <vector>
 
+using namespace llvm;
+
 // Lexer
 
 enum Token {
@@ -360,7 +362,7 @@ static std::unique_ptr<Module> TheModule;
 static std::map<std::string, Value *> NamedValues;
 
 Value* NumberExprAST::codegen() {
-  return ConstantFP::get(LLVMContext, APFloat(Val));
+  return ConstantFP::get(TheContext, APFloat(Val));
 }
 
 Value* VariableExprAST::codegen() {
@@ -385,7 +387,7 @@ Value* BinaryExprAST::codegen() {
       return Builder.CreateFMul(L, R, "multmp");
     case '<':
       L = Builder.CreateFCmpULT(L, R, "cmptmp");
-      return Builder.CreateUIToFP(L, Type::getDoubleTy(LLVMContext), "booltmp");
+      return Builder.CreateUIToFP(L, Type::getDoubleTy(TheContext), "booltmp");
     default:
       return LogErrorV("invalid binary operator");
   }
