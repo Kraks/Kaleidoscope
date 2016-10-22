@@ -370,6 +370,26 @@ Value* VariableExprAST::codegen() {
   return V;
 }
 
+Value* BinaryExprAST::codegen() {
+  Value* L = LHS->codegen();
+  Value* R = RHS->codegen();
+  if (!L || !R)
+    return nullptr;
+
+  switch (Op) {
+    case '+':
+      return Builder.CreateFAdd(L, R, "addtmp");
+    case '-':
+      return Builder.CreateFSub(L, R, "subtmp");
+    case '*':
+      return Builder.CreateFMul(L, R, "multmp");
+    case '<':
+      L = Builder.CreateFCmpULT(L, R, "cmptmp");
+      return Builder.CreateUIToFP(L, Type::getDoubleTy(LLVMContext), "booltmp");
+    default:
+      return LogErrorV("invalid binary operator");
+  }
+}
 
 int main(int argc, char** argv) {
   BinopPrecedence['<'] = 10;
