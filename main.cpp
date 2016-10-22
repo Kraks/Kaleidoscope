@@ -386,11 +386,38 @@ Value* BinaryExprAST::codegen() {
     case '*':
       return Builder.CreateFMul(L, R, "multmp");
     case '<':
+      // fcmp always returns i1 value
       L = Builder.CreateFCmpULT(L, R, "cmptmp");
       return Builder.CreateUIToFP(L, Type::getDoubleTy(TheContext), "booltmp");
     default:
       return LogErrorV("invalid binary operator");
   }
+}
+
+Value* CallExprAST::codegen() {
+  Function* CalleeF = TheModule->getFunction(Callee);
+  if (!CalleeF)
+    return LogErrorV("unknown function referenced.");
+
+  // If argument mismatch error.
+  if (CalleeF->arg_size() != Args.size())
+    return LogErrorV("Incorrect number of arguments passed.");
+
+  std::vector<Value*> ArgsV;
+  for (unsigned i = 0, e = Args.size(); i != e; i++) {
+    ArgsV.push_back(Args[i]->codegen());
+    if (!ArgsV.back()) 
+      return nullptr;
+  }
+
+  return Builder.CreateCall(CalleeF, ArgsV, "calltmp");
+}
+
+Function* PrototypeAST::codegen() {
+  std::vector<Type*> Doubles(Args.size(),
+      Type::getDoubleTy(TheContext));
+  FunctionType* FT = FunctionType::get(Type::getDoubleTy(TheContext), Doubles, false);
+  Function* F = Function::Create(FT, Function::ExternalLinkage, Name, TheModule);
 }
 
 int main(int argc, char** argv) {
