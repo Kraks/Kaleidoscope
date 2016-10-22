@@ -359,6 +359,18 @@ static IRBuilder<> Builder(TheContext);
 static std::unique_ptr<Module> TheModule;
 static std::map<std::string, Value *> NamedValues;
 
+Value* NumberExprAST::codegen() {
+  return ConstantFP::get(LLVMContext, APFloat(Val));
+}
+
+Value* VariableExprAST::codegen() {
+  Value* V = NamedValues[Name];
+  if (!V) 
+    LogErrorV("Unknown variable name");
+  return V;
+}
+
+
 int main(int argc, char** argv) {
   BinopPrecedence['<'] = 10;
   BinopPrecedence['+'] = 20;
