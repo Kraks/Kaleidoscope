@@ -87,14 +87,14 @@ class NumberExprAST : public ExprAST {
   double Val;
 public:
   NumberExprAST(double Val) : Val(Val) {}
-  virtual Value* codegen();
+  Value* codegen() override;
 };
 
 class VariableExprAST : public ExprAST {
   std::string Name;
 public:
   VariableExprAST(const std::string &Name) : Name(Name) {}
-  virtual Value* codegen();
+  Value* codegen() override;
 };
 
 class BinaryExprAST : public ExprAST {
@@ -103,7 +103,7 @@ class BinaryExprAST : public ExprAST {
 public:
   BinaryExprAST(char op, std::unique_ptr<ExprAST> LHS, std::unique_ptr<ExprAST> RHS)
     : Op(op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
-  virtual Value* codegen();
+  Value* codegen() override;
 };
 
 class CallExprAST : public ExprAST {
@@ -112,7 +112,7 @@ class CallExprAST : public ExprAST {
 public:
   CallExprAST(const std::string &Callee, std::vector<std::unique_ptr<ExprAST>> Args)
     : Callee(Callee), Args(std::move(Args)) {}
-  virtual Value* codegen();
+  Value* codegen() override;
 };
 
 class PrototypeAST {
@@ -121,6 +121,8 @@ class PrototypeAST {
 public:
   PrototypeAST(const std::string &Name, std::vector<std::string> Args)
     : Name(Name), Args(std::move(Args)) {}
+  Function* codegen();
+  const std::string& getName() const { return Name; }
 };
 
 class FunctionAST {
@@ -130,6 +132,7 @@ public:
   FunctionAST(std::unique_ptr<PrototypeAST> Proto,
               std::unique_ptr<ExprAST> Body)
     : Proto(std::move(Proto)), Body(std::move(Body)) {}
+  Function* codegen();
 };
 
 static int CurTok;
@@ -304,57 +307,6 @@ static std::unique_ptr<PrototypeAST> ParseExtern() {
   return ParsePrototype();
 }
 
-// Top Level Parsing
-
-static void HandleDefinition() {
-  if (ParseDefinition()) {
-    fprintf(stdout, "Parsed a function definition.\n");
-  }
-  else {
-    getNextToken();
-  }
-}
-
-static void HandleExtern() {
-  if (ParseExtern()) {
-    fprintf(stdout, "Parsed a function extern.\n");
-  }
-  else {
-    getNextToken();
-  }
-}
-
-static void HandleTopLevelExpr() {
-  if (ParseTopLevelExpr()) {
-    fprintf(stdout, "Parsed a function top-level expression.\n");
-  }
-  else {
-    getNextToken();
-  }
-}
-
-static void MainLoop() {
-  while(1) {
-    fprintf(stdout, "ready> ");
-    switch (CurTok) {
-      case tok_eof: 
-        return;
-      case ';':
-        getNextToken();
-        break;
-      case tok_def:
-        HandleDefinition();
-        break;
-      case tok_extern:
-        HandleExtern();
-        break;
-      default:
-        HandleTopLevelExpr();
-        break;
-    }
-  }
-}
-
 // Code Generation
 static LLVMContext TheContext;
 static IRBuilder<> Builder(TheContext);
@@ -418,6 +370,94 @@ Function* PrototypeAST::codegen() {
       Type::getDoubleTy(TheContext));
   FunctionType* FT = FunctionType::get(Type::getDoubleTy(TheContext), Doubles, false);
   Function* F = Function::Create(FT, Function::ExternalLinkage, Name, TheModule);
+  unsigned Idx = 0;
+  for (auto &Arg : F->args())
+    Arg.setName(Args[Idx++]);
+  return F;
+}
+
+Function* FunctionAST::codegen() {
+  Function* TheFunction = TheModule->getFunction(Proto->getName());
+  if (!TheFunction)
+    TheFunction = Proto->codegen();
+  if (!TheFunction)
+    return nullptr;
+  if (!TheFunction->empty())
+    return (Funtion*)LogErrorV("Function cannot be redefined");
+  
+  BasicBlock* BB = BasicBlock::Create(TheContext, "entry", TheFunction);
+  Builder.SetInsertPoint(BB);
+  NamedValues.clear();
+  for (auto &Arg : TheFunction->args())
+    NamedValues[Arg.getName()] = &Arg;
+
+  if (Value* RetVal = Body->codegen()) {
+    Builder.CreateRet(RetVal);
+    verifyFunction(*TheFunction);
+    return TheFunction;
+  }
+  TheFunction->eraseFromParent();
+  return nullptr;
+}
+
+// Top Level Parsing
+
+static void HandleDefinition() {
+  if (auto FnAST = ParseDefinition()) {
+    if (auto *FnIR = FnAST->codegen()) {
+      fprintf(stdout, "Parsed a function definition:\n");
+      FnIR->dump();
+    }
+  }
+  else {
+    getNextToken();
+  }
+}
+
+static void HandleExtern() {
+  if (auto ProtoAST = ParseExtern()) {
+    if (auto *FnIR = ProtoAST->codegen()) {
+      fprintf(stdout, "Parsed a function extern:\n");
+      FnIR->dump();
+    }
+  }
+  else {
+    getNextToken();
+  }
+}
+
+static void HandleTopLevelExpr() {
+  if (auto FnAST = ParseTopLevelExpr()) {
+    if (auto *FnIR = FnAST->codegen()) {
+      fprintf(stdout, "Parsed a function top-level expression:\n");
+      FnIR->dump();
+    }
+  }
+  else {
+    getNextToken();
+  }
+}
+
+static void MainLoop() {
+  while(1) {
+    fprintf(stdout, "ready> ");
+    switch (CurTok) {
+      case tok_eof: 
+        return;
+      case ';':
+        getNextToken();
+        break;
+      case tok_def:
+        HandleDefinition();
+        break;
+      case tok_extern:
+        HandleExtern();
+        break;
+      default:
+        HandleTopLevelExpr();
+        break;
+    }
+  }
 }
 
 int main(int argc, char** argv) {
@@ -428,6 +468,10 @@ int main(int argc, char** argv) {
   
   fprintf(stdout, "ready> ");
   getNextToken();
+  
+  TheModule = llvm::make_unique<Module>("My cool jit", TheContext);
+
   MainLoop();
+  TheModule->dump();
   return 0;
 }
