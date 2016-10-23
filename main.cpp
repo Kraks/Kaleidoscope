@@ -369,7 +369,7 @@ Function* PrototypeAST::codegen() {
   std::vector<Type*> Doubles(Args.size(),
       Type::getDoubleTy(TheContext));
   FunctionType* FT = FunctionType::get(Type::getDoubleTy(TheContext), Doubles, false);
-  Function* F = Function::Create(FT, Function::ExternalLinkage, Name, TheModule);
+  Function* F = Function::Create(FT, Function::ExternalLinkage, Name, TheModule.get());
   unsigned Idx = 0;
   for (auto &Arg : F->args())
     Arg.setName(Args[Idx++]);
@@ -383,7 +383,7 @@ Function* FunctionAST::codegen() {
   if (!TheFunction)
     return nullptr;
   if (!TheFunction->empty())
-    return (Funtion*)LogErrorV("Function cannot be redefined");
+    return (Function*)LogErrorV("Function cannot be redefined");
   
   BasicBlock* BB = BasicBlock::Create(TheContext, "entry", TheFunction);
   Builder.SetInsertPoint(BB);
